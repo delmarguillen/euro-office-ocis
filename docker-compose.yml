@@ -1,0 +1,113 @@
+services:
+  traefik:
+    image: traefik:v3.4
+    container_name: euro-office-traefik
+    command:
+      - "--log.level=WARN"
+      - "--entryPoints.https.address=:8443"
+      - "--providers.file.filename=/etc/traefik/dynamic.yml"
+      - "--serversTransport.insecureSkipVerify=true"
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./traefik/dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - ./certs:/certs:ro
+    networks:
+      euro-office:
+        aliases:
+          - ocis.localhost
+          - docs.localhost
+    restart: unless-stopped
+
+  ocis:
+    image: owncloud/ocis:latest
+    container_name: euro-office-ocis
+    entrypoint:
+      - /bin/sh
+      - -c
+      - "ocis init --insecure true || true; ocis server"
+    environment:
+      OCIS_INSECURE: "true"
+      OCIS_URL: https://ocis.localhost:8443
+      PROXY_HTTP_ADDR: 0.0.0.0:9200
+      PROXY_TLS: "false"
+      PROXY_TLS_INSECURE: "true"
+      PROXY_INSECURE_BACKENDS: "true"
+      PROXY_CSP_CONFIG_FILE_LOCATION: /etc/ocis/csp.yaml
+      NATS_NATS_HOST: 0.0.0.0
+      NATS_NATS_PORT: 9233
+      GATEWAY_GRPC_ADDR: 0.0.0.0:9142
+      OCIS_LOG_LEVEL: warn
+    volumes:
+      - ./config/ocis/csp.yaml:/etc/ocis/csp.yaml
+      - ./config/ocis/app-registry.yaml:/etc/ocis/app-registry.yaml
+      - ocis-config:/etc/ocis
+      - ocis-data:/var/lib/ocis
+    networks:
+      - euro-office
+    restart: unless-stopped
+
+  collaboration:
+    image: owncloud/ocis:latest
+    container_name: euro-office-collaboration
+    command: ["collaboration", "server"]
+    depends_on:
+      ocis:
+        condition: service_started
+      documentserver:
+        condition: service_healthy
+    environment:
+      OCIS_INSECURE: "true"
+      OCIS_URL: https://ocis.localhost:8443
+      MICRO_REGISTRY: nats-js-kv
+      MICRO_REGISTRY_ADDRESS: ocis:9233
+      GATEWAY_GRPC_ADDR: ocis:9142
+      REVA_GATEWAY: ocis:9142
+      FRONTEND_APP_HANDLER_INSECURE: "true"
+      COLLABORATION_HTTP_ADDR: 0.0.0.0:9300
+      COLLABORATION_GRPC_ADDR: 0.0.0.0:9301
+      COLLABORATION_WOPI_SRC: http://collaboration:9300
+      COLLABORATION_APP_NAME: "Euro-Office"
+      COLLABORATION_APP_PRODUCT: "Euro-Office"
+      COLLABORATION_APP_ADDR: https://docs.localhost:8443
+      COLLABORATION_APP_ICON: https://docs.localhost:8443/web-apps/apps/documenteditor/main/resources/img/favicon.ico
+      COLLABORATION_APP_INSECURE: "true"
+      COLLABORATION_APP_LOCKNAME: "Euro-Office"
+      COLLABORATION_CS3API_DATAGATEWAY_INSECURE: "true"
+    volumes:
+      - ocis-config:/etc/ocis
+      - ocis-data:/var/lib/ocis
+    networks:
+      - euro-office
+    restart: unless-stopped
+
+  documentserver:
+    image: ghcr.io/euro-office/documentserver:latest
+    container_name: euro-office-docs
+    entrypoint:
+      - /bin/bash
+      - /entrypoint-override.sh
+    environment:
+      WOPI_ENABLED: "true"
+      USE_UNAUTHORIZED_STORAGE: "true"
+      JWT_ENABLED: "false"
+    volumes:
+      - ./config/documentserver/entrypoint-override.sh:/entrypoint-override.sh:ro
+      - ./config/documentserver/local.json:/config-override/local.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/wopi-ready && curl -f http://localhost/hosting/discovery"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks:
+      - euro-office
+    restart: unless-stopped
+
+networks:
+  euro-office:
+    driver: bridge
+
+volumes:
+  ocis-config:
+  ocis-data:

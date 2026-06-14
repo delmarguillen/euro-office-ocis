@@ -1,0 +1,37 @@
+http:
+  routers:
+    ocis:
+      rule: "Host(`ocis.localhost`)"
+      service: ocis
+      tls: {}
+      entryPoints:
+        - https
+    docs:
+      rule: "Host(`docs.localhost`)"
+      service: docs
+      tls: {}
+      entryPoints:
+        - https
+      middlewares:
+        - docs-headers
+
+  middlewares:
+    docs-headers:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Proto: "https"
+
+  services:
+    ocis:
+      loadBalancer:
+        servers:
+          - url: "http://ocis:9200"
+    docs:
+      loadBalancer:
+        servers:
+          - url: "http://documentserver:80"
+
+tls:
+  certificates:
+    - certFile: /certs/cert.pem
+      keyFile: /certs/key.pem

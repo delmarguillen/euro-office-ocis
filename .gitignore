@@ -1,0 +1,22 @@
+# TLS certificates (generated per machine with mkcert)
+certs/
+
+# DocumentServer debugging artifacts
+config/documentserver/local.json
+config/documentserver/wopi.pem
+
+# Personal/local files
+*.pdf
+*.stackdump
+
+# IDE
+.idea/
+.vscode/
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# Podman/Docker
+*.log

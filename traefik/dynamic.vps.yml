@@ -1,0 +1,34 @@
+http:
+  routers:
+    ocis:
+      rule: "Host(`ocis.YOUR_IP.nip.io`)"
+      service: ocis
+      tls:
+        certResolver: letsencrypt
+      entryPoints:
+        - https
+    docs:
+      rule: "Host(`docs.YOUR_IP.nip.io`)"
+      service: docs
+      tls:
+        certResolver: letsencrypt
+      entryPoints:
+        - https
+      middlewares:
+        - docs-headers
+
+  middlewares:
+    docs-headers:
+      headers:
+        customRequestHeaders:
+          X-Forwarded-Proto: "https"
+
+  services:
+    ocis:
+      loadBalancer:
+        servers:
+          - url: "http://ocis:9200"
+    docs:
+      loadBalancer:
+        servers:
+          - url: "http://documentserver:80"
